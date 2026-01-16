@@ -22,36 +22,36 @@ struct ContentView: View {
             Color(isOn ? .black : .white)
                 .ignoresSafeArea()
             
-            VStack{
-                Spacer(minLength: 40)
+            HStack {
+                Spacer()
                 
-                //Pull thread
-                VStack(spacing: 0) {
-                    Capsule()
-                        .fill(Color.gray)
-                        .frame(width: 4, height: 120 + pullOffset)
+                VStack{
                     
-                    //Weight /knob
-                    Circle()
-                        .fill(Color.gray)
-                        .frame(width: 14, height: 14)
-                        .offset(y: pullOffset)
+                    //Pull thread
+                    VStack(spacing: 0) {
+                        Capsule()
+                            .fill(Color.gray)
+                            .frame(width: 4, height: 400 + pullOffset)
+                        
+                        //Weight /knob
+                        Circle()
+                            .fill(Color.gray)
+                            .frame(height: 40)
+                            .offset(y: pullOffset)
+                    }
+                    .padding(.trailing, 40)
+                    .ignoresSafeArea(edges: .top)
+                    .gesture(pullGesture)
+                    .animation(.interactiveSpring(response: 0.35,
+                                                  dampingFraction: 0.65,
+                                                  blendDuration: 0.2),
+                                value: pullOffset)
+                    Spacer()
                 }
-                .gesture(pullGesture)
-                .animation(.interactiveSpring(response: 0.35,
-                                              dampingFraction: 0.65,
-                                              blendDuration: 0.2),
-                            value: pullOffset)
-                
-                Spacer()
             }
-            VStack{
-                Spacer()
-                Text(isOn ? "Mode: Dark" : "Mode: Light")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(isOn ? .white : .black)
-                Spacer(minLength: 80)
-            }
+            
+            
+            AppUI(isOn: isOn)
         }
         .onChange(of: isOn) {
             applyInterfaceStyle($0)
