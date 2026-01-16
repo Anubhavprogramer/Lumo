@@ -12,11 +12,11 @@ struct WelcomeHeader: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Welcome Home")
+                Text("Welcome")
                     .font(.caption)
                     .foregroundColor(.gray)
                 
-                Text("Garret Reynolds")
+                Text("Anubhav")
                     .font(.title2)
                     .fontWeight(.bold)
             }
@@ -24,7 +24,7 @@ struct WelcomeHeader: View {
             Spacer()
             
             Image(systemName: "house.fill")
-                .font(.largeTitle)
+                .font(.headline)
         }
     }
 }

@@ -22,11 +22,33 @@ struct DeviceCard: View {
             
             Toggle(isOn: $isOn) {
                 Text(isOn ? "On" : "Off")
+                    .foregroundColor(Color("textColor"))
             }
             .toggleStyle(SwitchToggleStyle())
+            .tint(Color("SwitchColor"))
         }
         .padding()
-        .background(Color("CardColor"))
+        .background(Color("cardColor"))
         .cornerRadius(20)
+    }
+}
+
+struct IdeaCard: View {
+    let idea: Idea
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(idea.title)
+                .fontWeight(.semibold)
+                .foregroundColor(Color("textColor"))
+            
+            Text(idea.tag)
+                .font(.caption)
+                .foregroundColor(.gray)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color("cardColor"))
+        .cornerRadius(16)
     }
 }

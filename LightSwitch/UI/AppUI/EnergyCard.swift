@@ -16,13 +16,15 @@ struct EnergyCard: View {
             HStack {
                 ProgressView(value: 0.6)
                     .progressViewStyle(LinearProgressViewStyle())
+                    .tint(Color("ProgressBarColor"))
+                    
                 
                 Text("89 €")
                     .fontWeight(.bold)
             }
         }
         .padding()
-        .background(Color.white)
+        .background(Color("cardColor"))
         .cornerRadius(20)
     }
 }

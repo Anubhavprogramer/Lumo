@@ -9,28 +9,38 @@ import SwiftUI
 
 struct AppUI: View {
 
-    // MARK: - Input State
-    let isOn: Bool
-
+    let ideas = [
+        Idea(title: "Smart Home Automation", tag: "IoT"),
+        Idea(title: "AI Note Summarizer", tag: "AI"),
+        Idea(title: "Focus Tracker App", tag: "Productivity")
+    ]
+    
+    let projects = [
+        Project(name: "LightSwitch App", progress: 0.7),
+//        Project(name: "IdeaVault", progress: 0.4)
+    ]
+    
     var body: some View {
-        VStack(spacing: 20) {
-            TopTabBar()
-                        
-            WelcomeHeader()
-            
-            EnergyCard()
-            
-            DeviceGrid()
-            
-            Spacer()
+        ScrollView {
+            VStack(spacing: 24) {
+                
+                WelcomeHeader()
+                
+                PriorityProjectCard(project: projects[0])
+                
+                ProgressGraphCard()
+                
+                IdeaSection(ideas: ideas)
+                
+                ProjectSection(projects: projects)
+            }
+            .padding()
         }
+        .background(Color(.systemGray6))
     }
 }
 
 #Preview {
-    ZStack {
-        Color.black.ignoresSafeArea()
-        AppUI(isOn: true)
-    }
+    AppUI()
 }
 

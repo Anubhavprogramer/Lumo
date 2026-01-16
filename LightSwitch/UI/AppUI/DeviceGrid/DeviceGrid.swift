@@ -21,3 +21,38 @@ struct DeviceGrid: View {
         }
     }
 }
+
+struct ProjectSection: View {
+    let projects: [Project]
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Projects")
+                .font(.headline)
+                .foregroundColor(Color("textColor"))
+            
+            ForEach(projects) { project in
+                ProjectCard(project: project)
+            }
+        }
+    }
+}
+
+struct ProjectCard: View {
+    let project: Project
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(project.name)
+                .fontWeight(.semibold)
+                .foregroundColor(Color("textColor"))
+            
+            ProgressView(value: project.progress)
+                .progressViewStyle(.linear)
+                .tint(Color("SwitchColor"))
+        }
+        .padding()
+        .background(Color("cardColor"))
+        .cornerRadius(16)
+    }
+}

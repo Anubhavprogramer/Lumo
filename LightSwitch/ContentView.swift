@@ -19,8 +19,12 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             //MARK: Background
-            Color(isOn ? .black : .white)
+            Color(Color("BackgroundColor"))
                 .ignoresSafeArea()
+            
+            
+            AppUI()
+            
             
             HStack {
                 Spacer()
@@ -51,7 +55,6 @@ struct ContentView: View {
             }
             
             
-            AppUI(isOn: isOn)
         }
         .onChange(of: isOn) {
             applyInterfaceStyle($0)
