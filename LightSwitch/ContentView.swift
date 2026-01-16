@@ -30,12 +30,12 @@ struct ContentView: View {
                     //Pull thread
                     VStack(spacing: 0) {
                         Capsule()
-                            .fill(Color.gray)
+                            .fill(Color("SwitchColor"))
                             .frame(width: 4, height: 400 + pullOffset)
                         
                         //Weight /knob
                         Circle()
-                            .fill(Color.gray)
+                            .fill(Color("SwitchColor"))
                             .frame(height: 40)
                             .offset(y: pullOffset)
                     }
