@@ -12,21 +12,29 @@ struct ContentView: View {
     //MARK: STATE
     @State private var pullOffset: CGFloat = 0
     @State private var isOn: Bool = false
+
+    // rope/knob pose
     @State private var pullX: CGFloat = 0
     @State private var knobBounce: CGFloat = 0
 
-    // extra rope dynamics
-    @State private var releaseVelocityX: CGFloat = 0
+    // simple physics state (position & velocity)
+    @State private var vx: CGFloat = 0
+    @State private var vy: CGFloat = 0
+    @State private var lastTick: Date = .now
+    @State private var isDragging: Bool = false
 
-    private let maxPull: CGFloat = 140
-    private let triggerDIstance: CGFloat = 90
-    private let maxSide: CGFloat = 26
+    private let maxPull: CGFloat = 160
+    private let triggerDIstance: CGFloat = 95
+    private let maxSide: CGFloat = 32
+
+    // "thread" tuning
+    private let ropeTopLength: CGFloat = 210
+    private let ropeWidth: CGFloat = 70
+    private let knobSize: CGFloat = 44
 
     var body: some View {
         ZStack {
-            //MARK: Background
-            Color(Color("BackgroundColor"))
-                .ignoresSafeArea()
+            Color(Color("BackgroundColor")).ignoresSafeArea()
 
             AppUI()
 
@@ -34,20 +42,24 @@ struct ContentView: View {
                 Spacer()
 
                 VStack {
-
-                    // Pull thread
                     VStack(spacing: 0) {
+                        // Rope + knob must share the same coordinate space, so the rope end can
+                        // visually stick to the knob center.
                         ThreadRope(
-                            height: 420 + pullOffset + knobBounce,
+                            height: ropeTopLength + pullOffset + knobBounce,
                             swayX: pullX,
-                            isOn: isOn
+                            isOn: isOn,
+                            slack: max(0, -pullOffset),
+                            knobSize: knobSize
                         )
 
-                        // Weight / knob
                         KnobView(isOn: isOn)
+                            .frame(width: knobSize, height: knobSize)
                             .offset(x: pullX, y: pullOffset + knobBounce)
                             .shadow(color: .black.opacity(isOn ? 0.35 : 0.15), radius: 10, x: 0, y: 6)
                     }
+                    // Wider hit area & drawing area so rope doesn't clip/disappear when swaying.
+                    .frame(width: ropeWidth, alignment: .trailing)
                     .padding(.trailing, 40)
                     .ignoresSafeArea(edges: .top)
                     .contentShape(Rectangle())
@@ -57,6 +69,14 @@ struct ContentView: View {
                 }
             }
 
+            // Physics tick: when not dragging, continue to settle like a rope.
+            TimelineView(.animation) { timeline in
+                Color.clear
+                    .onChange(of: timeline.date) { _, newValue in
+                        tickPhysics(now: newValue)
+                    }
+            }
+            .allowsHitTesting(false)
         }
         .onChange(of: isOn) {
             applyInterfaceStyle($0)
@@ -66,70 +86,85 @@ struct ContentView: View {
     private var pullGesture: some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
-                // Vertical pull (with resistance) — allow tiny upward push too
-                // so it feels like a flexible thread rather than a strict "only down" slider.
+                isDragging = true
+
+                // allow both down & a bit up (slack)
                 let rawY = value.translation.height
                 let down = max(0, rawY)
-                let up = min(0, rawY) * 0.25 // small upward give
+                let up = min(0, rawY) * 0.35
 
                 let resistedPull = pow(down, 0.85)
                 pullOffset = min(resistedPull, maxPull) + up
 
-                // Horizontal sway (more flexible + keeps working even when not pulled much)
+                // looser sideways when slack, tighter when pulled
                 let rawX = value.translation.width
-                let tension = 1 + (max(0, pullOffset) / 70) // more tension when pulled => less side movement
+                let tension = 1 + (max(0, pullOffset) / 60)
                 let resistedX = rawX / tension
-
-                // approximate release velocity (for nicer fling)
-                releaseVelocityX = resistedX - pullX
-
                 pullX = max(-maxSide, min(maxSide, resistedX))
 
-                // When dragging, don't keep residual bounce
+                // reset velocities while user is holding
+                vx = 0
+                vy = 0
                 knobBounce = 0
             }
             .onEnded { _ in
+                isDragging = false
+
                 if pullOffset > triggerDIstance {
                     toggleMode()
                 }
 
-                // Bigger, more "thread-like" bounce: decaying oscillation
-                // Vertical snap
-                withAnimation(.interpolatingSpring(stiffness: 260, damping: 14)) {
-                    pullOffset = 0
-                    knobBounce = 26
-                }
+                // give an initial "release" impulse proportional to displacement
+                vx = -pullX * 4.5
+                vy = -pullOffset * 2.2
 
-                // Horizontal snap with a bit of fling (based on last velocity)
-                let fling = max(-12, min(12, releaseVelocityX * 5))
-                withAnimation(.interpolatingSpring(stiffness: 220, damping: 14)) {
-                    pullX = fling
+                // quick snap to remove hard stop feel; the rest is physics
+                withAnimation(.interpolatingSpring(stiffness: 240, damping: 16)) {
+                    knobBounce = 18
                 }
-
-                // 2nd oscillation
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-                    withAnimation(.interpolatingSpring(stiffness: 240, damping: 15)) {
-                        knobBounce = -14
-                        pullX = -fling * 0.55
-                    }
-                }
-
-                // 3rd oscillation
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {
                     withAnimation(.interpolatingSpring(stiffness: 260, damping: 16)) {
-                        knobBounce = 8
-                        pullX = fling * 0.28
-                    }
-                }
-
-                // settle
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.26) {
-                    withAnimation(.interactiveSpring(response: 0.45, dampingFraction: 0.78, blendDuration: 0.12)) {
                         knobBounce = 0
-                        pullX = 0
                     }
                 }
             }
+    }
+
+    // MARK: - Physics (simple rope-like spring)
+    private func tickPhysics(now: Date) {
+        guard !isDragging else {
+            lastTick = now
+            return
+        }
+
+        let dt = min(1.0 / 30.0, max(0.0, now.timeIntervalSince(lastTick)))
+        lastTick = now
+
+        // Spring back to rest: pullOffset -> 0, pullX -> 0
+        // Tweak these to taste.
+        let k: CGFloat = 34      // spring stiffness
+        let c: CGFloat = 8.5     // damping
+        let g: CGFloat = 58      // pseudo gravity pulling down when above rest (for "free fall" feel)
+
+        // X dynamics
+        let ax = (-k * pullX) - (c * vx)
+        vx += ax * dt
+        pullX += vx * dt
+
+        // Y dynamics
+        // When pulled up (negative pullOffset), gravity helps pull it down.
+        let gravity = pullOffset < 0 ? g : 0
+        let ay = (-k * pullOffset) - (c * vy) + gravity
+        vy += ay * dt
+        pullOffset += vy * dt
+
+        // clamp tiny jitter
+        if abs(pullX) < 0.05 && abs(vx) < 0.05 { pullX = 0; vx = 0 }
+        if abs(pullOffset) < 0.05 && abs(vy) < 0.05 { pullOffset = 0; vy = 0 }
+
+        // hard limits (so it doesn't explode)
+        pullX = max(-maxSide, min(maxSide, pullX))
+        pullOffset = max(-40, min(maxPull, pullOffset))
     }
 
     // MARK: - Toggle
@@ -152,54 +187,54 @@ private struct ThreadRope: View {
     let height: CGFloat
     let swayX: CGFloat
     let isOn: Bool
+    let slack: CGFloat
+    let knobSize: CGFloat
 
     var body: some View {
-        // NOTE:
-        // SwiftUI doesn't render SVG directly.
-        // Convert `thread.svg` -> a single-page vector PDF and add it to Assets as `RopeThread`
-        // with "Render As: Template Image" to allow tinting via SwitchColor.
+        Canvas { context, size in
+            let w = size.width
+            let h = size.height
 
-        if UIImage(named: "RopeThread") != nil {
-            Image("RopeThread")
-                .resizable()
-                .renderingMode(.template)
-                .foregroundStyle(Color("SwitchColor"))
-                // stretch vertically to match pull height
-                .scaledToFill()
-                .frame(width: 26, height: max(40, height))
-                .clipped()
-                .offset(x: swayX * 0.55)
-                .accessibilityHidden(true)
-        } else {
-            // Fallback: keep the programmatic rope so the project still runs
-            Canvas { context, size in
-                let w = size.width
-                let h = size.height
+            // Anchor at top.
+            let start = CGPoint(x: w / 2, y: 0)
 
-                let start = CGPoint(x: w / 2, y: 0)
-                let end = CGPoint(x: w / 2 + swayX * 0.65, y: h)
-                let control = CGPoint(x: w / 2 + swayX, y: h * 0.55)
+            // End should visually meet the knob center.
+            // Because the knob is placed immediately after the rope view, the knob's center Y
+            // is just below the rope's bottom edge. We pull the rope slightly beyond its height
+            // so it "touches" the knob.
+            let end = CGPoint(x: w / 2 + swayX * 0.65, y: h + knobSize * 0.22)
 
-                var path = Path()
-                path.move(to: start)
-                path.addQuadCurve(to: end, control: control)
+            // Add slack by introducing a small fold (extra curvature) near the top.
+            let fold = min(32, slack * 1.0)
+            let c1 = CGPoint(x: w / 2 + swayX * 1.2, y: h * 0.30)
+            let c2 = CGPoint(x: w / 2 - swayX * 0.35, y: h * 0.74)
 
-                context.stroke(
-                    path,
-                    with: .color(Color("SwitchColor").opacity(isOn ? 0.9 : 0.85)),
-                    style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round)
-                )
+            var path = Path()
+            path.move(to: start)
+            path.addCurve(
+                to: end,
+                control1: CGPoint(x: c1.x, y: c1.y + fold),
+                control2: CGPoint(x: c2.x, y: c2.y + fold * 0.45)
+            )
 
-                var highlight = path
-                highlight = highlight.applying(CGAffineTransform(translationX: 0.9, y: 0))
-                context.stroke(
-                    highlight,
-                    with: .color(.white.opacity(isOn ? 0.22 : 0.16)),
-                    style: StrokeStyle(lineWidth: 1.0, lineCap: .round)
-                )
-            }
-            .frame(width: 18, height: max(40, height))
+            context.stroke(
+                path,
+                with: .color(Color("SwitchColor").opacity(isOn ? 0.92 : 0.86)),
+                style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round)
+            )
+
+            var highlight = path
+            highlight = highlight.applying(CGAffineTransform(translationX: 0.9, y: 0))
+            context.stroke(
+                highlight,
+                with: .color(.white.opacity(isOn ? 0.22 : 0.16)),
+                style: StrokeStyle(lineWidth: 1.0, lineCap: .round)
+            )
         }
+        // Wider frame so the curve never clips off-screen when swaying.
+        .frame(width: 70, height: max(80, height))
+        .clipped(antialiased: false)
+        .accessibilityHidden(true)
     }
 }
 
@@ -219,10 +254,6 @@ private struct KnobView: View {
                         endPoint: .bottomTrailing
                     )
                 )
-
-            Circle()
-                .stroke(.white.opacity(isOn ? 0.25 : 0.18), lineWidth: 1)
-                .padding(2)
 
             Image(systemName: "power")
                 .font(.system(size: 14, weight: .semibold))
